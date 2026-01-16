@@ -1,56 +1,72 @@
+import streamlit as st
 import sys
 import os
+from PIL import Image
+import traceback
 
+# Allow imports from project root
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
-from defect_detection import rgb_to_binary_map
-from region_analysis import dfs
-from classification import classify_local
-from severity_priority import add_to_priority
+st.set_page_config(
+    page_title="Pipeline Defect Detection System",
+    layout="wide"
+)
 
+st.title("🛢️ Pipeline Defect Detection System (DSA Based)")
+st.write("Upload pipeline images to detect **Corrosion / Crack**")
 
-def process_image_logic(pixels, width, height, pipe_id):
-    binary_map = rgb_to_binary_map(pixels, width, height)
+# ---- FILE UPLOADER ----
+uploaded_files = st.file_uploader(
+    "Upload Pipe Images",
+    type=["jpg", "jpeg", "png"],
+    accept_multiple_files=True
+)
 
-    visited = [[False] * width for _ in range(height)]
+# ---- STOP EARLY IF NO FILES ----
+if not uploaded_files:
+    st.info("⬆️ Upload one or more pipeline images to start analysis.")
+    st.stop()
 
-    global_min_i = global_min_j = float("inf")
-    global_max_i = global_max_j = -1
+# ---- IMPORT LOGIC SAFELY ----
+try:
+    from core.image_logic import process_image_logic
+except Exception as e:
+    st.error("❌ Failed to import processing logic")
+    st.code(traceback.format_exc())
+    st.stop()
 
-    total_continuity = 0
-    region_count = 0
-    final_defect = "NORMAL"
+# ---- PROCESS EACH IMAGE ----
+for idx, file in enumerate(uploaded_files, start=1):
+    st.divider()
+    st.subheader(f"PIPE_{idx:03d}")
 
-    for i in range(height):
-        for j in range(width):
-            if binary_map[i][j] == 1 and not visited[i][j]:
-                area, length, avg_color, mi, mj, Ma, Mb = dfs(
-                    binary_map, pixels, visited, i, j, height, width
-                )
+    try:
+        image = Image.open(file).convert("RGB")
+        st.image(image, caption=file.name, width=350)
 
-                global_min_i = min(global_min_i, mi)
-                global_min_j = min(global_min_j, mj)
-                global_max_i = max(global_max_i, Ma)
-                global_max_j = max(global_max_j, Mb)
+        # Convert image to pixels
+        pixels = image.load()
+        width, height = image.size
 
-                total_continuity += length
-                region_count += 1
+        # Run main logic
+        result = process_image_logic(
+            pixels=pixels,
+            width=width,
+            height=height,
+            pipe_id=f"PIPE_{idx:03d}"
+        )
 
-                local_defect = classify_local(avg_color)
-                if final_defect == "NORMAL":
-                    final_defect = local_defect
+        # ---- DISPLAY RESULTS ----
+        st.markdown("### 🔲 Binary Defect Map (Center Sample)")
+        st.code(result["binary_sample"])
 
-    global_length = max(
-        global_max_i - global_min_i,
-        global_max_j - global_min_j,
-        0
-    )
+        st.markdown("### 📊 Matrix Summary")
+        st.write(f"**Total Pixels:** {result['total_pixels']}")
+        st.write(f"**Suspicious Pixels:** {result['suspicious_pixels']}")
+        st.write(f"**Affected Percentage:** {result['affected_percentage']}%")
 
-    avg_continuity = total_continuity / max(region_count, 1)
+        st.success(f"✅ Detected Defect: **{result['final_defect']}**")
 
-    if global_length > 100 and avg_continuity > 5:
-        final_defect = "CRACK"
-
-    add_to_priority(pipe_id, final_defect, int(global_length))
-
-    return final_defect, binary_map
+    except Exception:
+        st.error("❌ Error while processing this image")
+        st.code(traceback.format_exc())
