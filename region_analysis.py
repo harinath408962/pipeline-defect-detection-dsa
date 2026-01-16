@@ -1,49 +1,45 @@
-def dfs(binary_map, pixels, visited, row, col, height, width):
-    stack = [(row, col)]
-    visited[row][col] = True
+def dfs(binary_map, pixels, visited, r, c, height, width):
+    stack = [(r, c)]
+    visited[r][c] = True
 
     area = 0
-    min_r = min_c = 10**9
-    max_r = max_c = -1
-    total_r = total_g = total_b = 0
+    length = 0
+    sum_r = sum_g = sum_b = 0
+
+    min_r = max_r = r
+    min_c = max_c = c
 
     while stack:
-        r, c = stack.pop()
+        x, y = stack.pop()
         area += 1
+        length += 1
 
-        min_r = min(min_r, r)
-        min_c = min(min_c, c)
-        max_r = max(max_r, r)
-        max_c = max(max_c, c)
+        pr, pg, pb = pixels[y, x]
+        sum_r += pr
+        sum_g += pg
+        sum_b += pb
 
-        # ✅ correct pixel access
-        pr, pg, pb = pixels[c, r]
-        total_r += pr
-        total_g += pg
-        total_b += pb
+        min_r = min(min_r, x)
+        max_r = max(max_r, x)
+        min_c = min(min_c, y)
+        max_c = max(max_c, y)
 
-        for dr, dc in [(-1,0),(1,0),(0,-1),(0,1)]:
-            nr, nc = r + dr, c + dc
-            if (
-                0 <= nr < height and
-                0 <= nc < width and
-                not visited[nr][nc] and
-                binary_map[nr][nc] == 1
-            ):
-                visited[nr][nc] = True
-                stack.append((nr, nc))
+        for dx, dy in [(-1,0),(1,0),(0,-1),(0,1)]:
+            nx, ny = x+dx, y+dy
+            if 0 <= nx < height and 0 <= ny < width:
+                if binary_map[nx][ny] == 1 and not visited[nx][ny]:
+                    visited[nx][ny] = True
+                    stack.append((nx, ny))
 
     avg_color = (
-        total_r // area,
-        total_g // area,
-        total_b // area
+        sum_r//area,
+        sum_g//area,
+        sum_b//area
     )
 
-    length = max(max_r - min_r, max_c - min_c)
     return area, length, avg_color, min_r, min_c, max_r, max_c
 
 
-# ✅ THIS FUNCTION WAS MISSING (YOUR ERROR)
 def binary_map_summary(binary_map):
     total = 0
     suspicious = 0

@@ -1,7 +1,7 @@
 from PIL import Image
 
-def load_image(uploaded_file):
-    img = Image.open(uploaded_file).convert("RGB")
-    width, height = img.size
+def load_image(path):
+    img = Image.open(path).convert("RGB")
     pixels = img.load()
+    width, height = img.size
     return pixels, width, height

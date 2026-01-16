@@ -1,72 +1,70 @@
-import streamlit as st
 import sys
 import os
+
+ROOT_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
+if ROOT_DIR not in sys.path:
+    sys.path.insert(0, ROOT_DIR)
+
+import streamlit as st
 from PIL import Image
-import traceback
+from core.image_logic import process_image_logic
+from defect_detection import rgb_to_binary_map
+from region_analysis import dfs
+from classification import classify_local
+from severity_priority import add_to_priority
+from input_module import load_image
 
-# Allow imports from project root
-sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
-st.set_page_config(
-    page_title="Pipeline Defect Detection System",
-    layout="wide"
-)
 
-st.title("🛢️ Pipeline Defect Detection System (DSA Based)")
-st.write("Upload pipeline images to detect **Corrosion / Crack**")
 
-# ---- FILE UPLOADER ----
+st.set_page_config(page_title="Pipeline Defect Detection", layout="wide")
+st.title("Pipeline Defect Detection System (DSA Based)")
+
 uploaded_files = st.file_uploader(
     "Upload Pipe Images",
-    type=["jpg", "jpeg", "png"],
+    type=["jpg","jpeg","png"],
     accept_multiple_files=True
 )
 
-# ---- STOP EARLY IF NO FILES ----
-if not uploaded_files:
-    st.info("⬆️ Upload one or more pipeline images to start analysis.")
-    st.stop()
+pipe_count = 1
 
-# ---- IMPORT LOGIC SAFELY ----
-try:
-    from core.image_logic import process_image_logic
-except Exception as e:
-    st.error("❌ Failed to import processing logic")
-    st.code(traceback.format_exc())
-    st.stop()
+if uploaded_files:
+    for file in uploaded_files:
+        st.divider()
+        pipe_id = f"PIPE_{pipe_count:03d}"
+        st.header(pipe_id)
 
-# ---- PROCESS EACH IMAGE ----
-for idx, file in enumerate(uploaded_files, start=1):
-    st.divider()
-    st.subheader(f"PIPE_{idx:03d}")
+        img = Image.open(file).convert("RGB")
+        st.image(img, caption=file.name, width=350)
 
-    try:
-        image = Image.open(file).convert("RGB")
-        st.image(image, caption=file.name, width=350)
+        pixels = img.load()
+        width, height = img.size
 
-        # Convert image to pixels
-        pixels = image.load()
-        width, height = image.size
+        try:
+            result = process_image_logic(pixels, width, height, pipe_id)
 
-        # Run main logic
-        result = process_image_logic(
-            pixels=pixels,
-            width=width,
-            height=height,
-            pipe_id=f"PIPE_{idx:03d}"
-        )
+            st.subheader("Binary Defect Map (Center Sample)")
+            binary_map = result["binary_sample"]
 
-        # ---- DISPLAY RESULTS ----
-        st.markdown("### 🔲 Binary Defect Map (Center Sample)")
-        st.code(result["binary_sample"])
+            center = len(binary_map)//2
+            sample = binary_map[center-5:center+5]
 
-        st.markdown("### 📊 Matrix Summary")
-        st.write(f"**Total Pixels:** {result['total_pixels']}")
-        st.write(f"**Suspicious Pixels:** {result['suspicious_pixels']}")
-        st.write(f"**Affected Percentage:** {result['affected_percentage']}%")
+            ascii_view = "\n".join(
+                " ".join(str(c) for c in row[:20])
+                for row in sample
+            )
 
-        st.success(f"✅ Detected Defect: **{result['final_defect']}**")
+            st.code(ascii_view)
 
-    except Exception:
-        st.error("❌ Error while processing this image")
-        st.code(traceback.format_exc())
+            st.subheader("Matrix Summary")
+            st.write("Total Pixels:", result["total_pixels"])
+            st.write("Suspicious Pixels:", result["suspicious_pixels"])
+            st.write("Affected Percentage:", result["affected_percentage"], "%")
+
+            st.success(f"Detected Defect: {result['final_defect']}")
+
+        except Exception as e:
+            st.error("Error while processing this image")
+            st.exception(e)
+
+        pipe_count += 1
