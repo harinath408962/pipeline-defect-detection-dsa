@@ -1,17 +1,35 @@
-from defect_detection import rgb_to_binary_map
-from region_analysis import dfs, binary_map_summary
+from defect_detection import rgb_to_binary_map, detect_linear_crack
+from region_analysis import dfs
 from classification import classify_local
 from severity_priority import add_to_priority
 
 
 def process_image_logic(pixels, width, height, pipe_id):
+
+    # ======================================================
+    # 1️⃣ STRUCTURAL (LINEAR) CRACK DETECTION — FIRST
+    # ======================================================
+    if detect_linear_crack(pixels, width, height):
+        final_defect = "CRACK"
+        add_to_priority(pipe_id, final_defect, width)
+
+        return {
+            "final_defect": final_defect,
+            "binary_sample": [[0]*20 for _ in range(10)],
+            "total_pixels": width * height,
+            "suspicious_pixels": 0,
+            "affected_percentage": 0.0
+        }
+
+    # ======================================================
+    # 2️⃣ COLOR-BASED BINARY MAP (CORROSION / RUST)
+    # ======================================================
     binary_map = rgb_to_binary_map(pixels, width, height)
     visited = [[False]*width for _ in range(height)]
 
-    gmin_r = gmin_c = 10**9
-    gmax_r = gmax_c = -1
     total_length = 0
     regions = 0
+    suspicious_pixels = 0
     final_defect = "NORMAL"
 
     for r in range(height):
@@ -21,32 +39,31 @@ def process_image_logic(pixels, width, height, pipe_id):
                     binary_map, pixels, visited, r, c, height, width
                 )
 
-                gmin_r = min(gmin_r, mi)
-                gmin_c = min(gmin_c, mj)
-                gmax_r = max(gmax_r, Ma)
-                gmax_c = max(gmax_c, Mb)
-
-                total_length += length
+                suspicious_pixels += area
                 regions += 1
+                total_length += length
 
                 local = classify_local(avg_color)
-                if final_defect == "NORMAL":
+                if final_defect == "NORMAL" and local != "NORMAL":
                     final_defect = local
 
-    global_span = max(gmax_r - gmin_r, gmax_c - gmin_c)
-    avg_continuity = total_length / max(regions, 1)
+    total_pixels = width * height
+    affected_percentage = round((suspicious_pixels / total_pixels) * 100, 2)
 
-    if global_span > 120 and avg_continuity > 6:
-        final_defect = "CRACK"
+    add_to_priority(pipe_id, final_defect, int(affected_percentage))
 
-    add_to_priority(pipe_id, final_defect, int(global_span))
-
-    total, suspicious, percent = binary_map_summary(binary_map)
+    # ======================================================
+    # 3️⃣ SAFE BINARY SAMPLE FOR UI
+    # ======================================================
+    center = height // 2
+    binary_sample = [
+        row[:20] for row in binary_map[max(0, center-5):center+5]
+    ]
 
     return {
         "final_defect": final_defect,
-        "binary_sample": binary_map,
-        "total_pixels": total,
-        "suspicious_pixels": suspicious,
-        "affected_percentage": percent
+        "binary_sample": binary_sample,
+        "total_pixels": total_pixels,
+        "suspicious_pixels": suspicious_pixels,
+        "affected_percentage": affected_percentage
     }

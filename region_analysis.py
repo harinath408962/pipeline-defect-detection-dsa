@@ -1,54 +1,51 @@
-def dfs(binary_map, pixels, visited, r, c, height, width):
-    stack = [(r, c)]
-    visited[r][c] = True
+def dfs(binary_map, pixels, visited, i, j, height, width):
+    stack = [(i, j)]
+    visited[i][j] = True
 
     area = 0
     length = 0
-    sum_r = sum_g = sum_b = 0
+    r_sum = int(0)
+    g_sum = int(0)
+    b_sum = int(0)
 
-    min_r = max_r = r
-    min_c = max_c = c
+
+    min_i = max_i = i
+    min_j = max_j = j
 
     while stack:
         x, y = stack.pop()
         area += 1
-        length += 1
 
-        pr, pg, pb = pixels[y, x]
-        sum_r += pr
-        sum_g += pg
-        sum_b += pb
+        r, g, b = pixels[x][y]
 
-        min_r = min(min_r, x)
-        max_r = max(max_r, x)
-        min_c = min(min_c, y)
-        max_c = max(max_c, y)
+        r_sum += int(r)
+        g_sum += int(g)
+        b_sum += int(b)
 
-        for dx, dy in [(-1,0),(1,0),(0,-1),(0,1)]:
-            nx, ny = x+dx, y+dy
+
+        min_i = min(min_i, x)
+        max_i = max(max_i, x)
+        min_j = min(min_j, y)
+        max_j = max(max_j, y)
+
+        neighbors = [(x-1,y), (x+1,y), (x,y-1), (x,y+1)]
+        local_links = 0
+
+        for nx, ny in neighbors:
             if 0 <= nx < height and 0 <= ny < width:
-                if binary_map[nx][ny] == 1 and not visited[nx][ny]:
-                    visited[nx][ny] = True
-                    stack.append((nx, ny))
+                if binary_map[nx][ny] == 1:
+                    local_links += 1
+                    if not visited[nx][ny]:
+                        visited[nx][ny] = True
+                        stack.append((nx, ny))
+
+        if local_links >= 2:
+            length += 1
 
     avg_color = (
-        sum_r//area,
-        sum_g//area,
-        sum_b//area
+        r_sum // area,
+        g_sum // area,
+        b_sum // area
     )
 
-    return area, length, avg_color, min_r, min_c, max_r, max_c
-
-
-def binary_map_summary(binary_map):
-    total = 0
-    suspicious = 0
-
-    for row in binary_map:
-        for cell in row:
-            total += 1
-            if cell == 1:
-                suspicious += 1
-
-    percent = round((suspicious / total) * 100, 2)
-    return total, suspicious, percent
+    return area, length, avg_color, min_i, min_j, max_i, max_j

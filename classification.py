@@ -1,9 +1,19 @@
 def classify_local(avg_color):
     r, g, b = avg_color
+    brightness = (r + g + b) / 3
 
-    if r > 140 and g < 100:
-        return "CORROSION"
-    elif r < 100 and g < 100:
+    # Crack color rule (dark + low variance)
+    if (
+        brightness <= 80 and
+        abs(r - g) <= 15 and
+        abs(g - b) <= 15 and
+        abs(r - b) <= 15
+    ):
         return "CRACK"
-    else:
-        return "DAMP"
+
+    # Corrosion rule
+    if r >= 120 and g >= 60 and b <= 100:
+        return "CORROSION"
+
+    return "NORMAL"
+
