@@ -47,5 +47,15 @@ def dfs(binary_map, pixels, visited, i, j, height, width):
         g_sum // area,
         b_sum // area
     )
+    
+    # Calculate Bounding Box Area
+    bbox_width = (max_j - min_j) + 1
+    bbox_height = (max_i - min_i) + 1
+    bbox_area = bbox_width * bbox_height
+    
+    # Rectangularity / Solidity: How much of the bounding box is filled?
+    # Solid shapes (corrosion) ~ high solidity
+    # Thin/diagonal shapes (cracks) ~ low solidity relative to bbox (unless perfectly vertical/horizontal)
+    rectangularity = area / bbox_area if bbox_area > 0 else 0
 
-    return area, length, avg_color, min_i, min_j, max_i, max_j
+    return area, length, avg_color, min_i, min_j, max_i, max_j, rectangularity

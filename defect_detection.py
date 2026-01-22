@@ -4,15 +4,38 @@
 
 def rgb_to_binary_map(pixels, width, height):
     binary_map = [[0]*width for _ in range(height)]
+    
+    # calculate global average brightness for baseline
+    total_brightness = 0
+    for y in range(height):
+        for x in range(width):
+            r, g, b = pixels[y, x]
+            total_brightness += (int(r) + int(g) + int(b))
+    
+    if width * height > 0:
+        global_avg_brightness = total_brightness / (3 * width * height)
+    else:
+        global_avg_brightness = 128  # Fallback
 
     for y in range(height):
         for x in range(width):
-            r, g, b = pixels[y, x]   # ✅ FIXED ORDER
+            r, g, b = pixels[y, x]
+            brightness = (int(r) + int(g) + int(b)) / 3
 
-            # Rust / corrosion color rule
-            if (r > 120 and r > g and r > b):
+            # 1. Dark Anomaly (Crack/Damp) - darker than global avg
+            # Relaxed to 0.75 to detect lighter damp patches
+            if brightness < global_avg_brightness * 0.75:
                 binary_map[y][x] = 1
-
+                
+            # 2. Rust / Corrosion - Specific Color Rules
+            # Red dominance + Deviation from gray
+            elif (int(r) > 100 and int(r) > int(g) + 20 and int(r) > int(b) + 20):
+                binary_map[y][x] = 1
+                
+            # 3. High Contrast Anomaly (General)
+            # If a pixel is very different from its neighbors (Laplacian-like check could be here, 
+            # but per instructions, keeping it simple pixel-level first, relying on global contrast)
+            
     return binary_map
 
 

@@ -12,6 +12,7 @@ from PIL import Image
 import numpy as np
 
 from core.image_logic import process_image_logic
+from severity_priority import clear_priority_queue
 
 # ---------- STREAMLIT CONFIG ----------
 st.set_page_config(
@@ -32,6 +33,7 @@ pipe_count = 1
 
 # ---------- PROCESS EACH IMAGE ----------
 if uploaded_files:
+    clear_priority_queue()
     for file in uploaded_files:
         st.divider()
 
@@ -53,40 +55,81 @@ if uploaded_files:
             )
 
             # ============================
+            # UNPACK RESULT
+            # ============================
+            final_defect = result["final_defect"]
+            explanation = result.get("explanation", "Analysis complete.")
+            
+            # 1. INVALID PIPE WARNING
+            if final_defect == "INVALID":
+                st.error(f"⚠️ {explanation}")
+                st.warning("This image does not appear to be a valid pipe surface.")
+                # We stop showing details for invalid pipes to avoid confusion?
+                # Or show what we found? Let's show stats but flag red.
+            else:
+                st.success(f"✅ Pipe Structure Validated: {result.get('explanation', '').split('.')[0]}")
+
+
+            # ============================
             # BINARY DEFECT MAP (CENTER)
             # ============================
             st.subheader("Binary Defect Map (Center Sample)")
+            st.caption("0 = Normal, 1 = Defect Candidate")
 
             binary_sample = result["binary_sample"]
 
             ascii_view = "\n".join(
-                " ".join(str(cell) for cell in row[:20])
+                " ".join(str(cell) for cell in row)
                 for row in binary_sample
             )
 
-            st.code(ascii_view)
+            st.code(ascii_view, language="text")
 
             # ============================
             # MATRIX SUMMARY (FROM LOGIC)
             # ============================
-            st.subheader("Matrix Summary")
-            st.write("Total Pixels:", result["total_pixels"])
-            st.write("Suspicious Pixels:", result["suspicious_pixels"])
-            st.write(
-                "Affected Percentage:",
-                result["affected_percentage"],
-                "%"
-            )
+            col1, col2, col3 = st.columns(3)
+            col1.metric("Total Pixels", result["total_pixels"])
+            col2.metric("Suspicious Pixels", result["suspicious_pixels"])
+            col3.metric("Affected %", f"{result['affected_percentage']}%")
 
+            st.info(f"📋 Analysis Detail: {explanation}")
+            
             # ============================
             # FINAL RESULT
             # ============================
-            st.success(
-                f"Detected Defect: {result['final_defect']}"
-            )
+            if final_defect == "CRACK":
+                st.error(f"🔴 FINAL CLASSIFICATION: {final_defect}")
+            elif final_defect == "CORROSION":
+                st.warning(f"🟠 FINAL CLASSIFICATION: {final_defect}")
+            elif final_defect == "DAMP":
+                st.warning(f"🟡 FINAL CLASSIFICATION: {final_defect}")
+            elif final_defect == "INVALID":
+                st.error(f"❌ CLASSIFICATION: {final_defect}")
+            else:
+                st.success(f"🟢 FINAL CLASSIFICATION: {final_defect}")
+                
+            st.markdown("---") 
 
         except Exception as e:
             st.error("Error while processing this image")
             st.exception(e)
 
         pipe_count += 1
+        
+    # ============================
+    # GLOBAL PRIORITY QUEUE RANKING
+    # ============================
+    st.header("Global Severity Ranking (Priority Queue)")
+    from severity_priority import get_priority_list
+    
+    pq = get_priority_list()
+    
+    if pq:
+        ranking_data = [
+            {"Rank": i+1, "Pipe ID": pid, "Defect": dtype, "Priority Score": score} 
+            for i, (pid, dtype, score) in enumerate(pq)
+        ]
+        st.table(ranking_data)
+    else:
+        st.write("No pipes processed yet.")
