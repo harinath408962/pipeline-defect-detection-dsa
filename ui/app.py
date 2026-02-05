@@ -71,19 +71,20 @@ if uploaded_files:
 
 
             # ============================
-            # BINARY DEFECT MAP (CENTER)
+            # BINARY DEFECT MAP (Sample) - Hide if Invalid
             # ============================
-            st.subheader("Binary Defect Map (Center Sample)")
-            st.caption("0 = Normal, 1 = Defect Candidate")
+            if final_defect != "INVALID":
+                st.subheader("Binary Defect Map (Defect Focus Sample)")
+                st.caption("0 = Normal, 1 = Defect Candidate")
 
-            binary_sample = result["binary_sample"]
+                binary_sample = result["binary_sample"]
 
-            ascii_view = "\n".join(
-                " ".join(str(cell) for cell in row)
-                for row in binary_sample
-            )
+                ascii_view = "\n".join(
+                    " ".join(str(cell) for cell in row)
+                    for row in binary_sample
+                )
 
-            st.code(ascii_view, language="text")
+                st.code(ascii_view, language="text")
 
             # ============================
             # MATRIX SUMMARY (FROM LOGIC)

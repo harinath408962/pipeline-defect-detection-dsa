@@ -31,55 +31,48 @@ def classify_region(area, bbox_width, bbox_height, avg_color, rectangularity, av
         return "DAMP"
 
     # ============================
-    # 2. GEOMETRY (CRACK vs REST)
+    # 2. GEOMETRY & SHARPNESS CHECK
     # ============================
     
-    # CRACK: Long, thin, high aspect ratio.
-    if aspect_ratio > 3.0:
-        
-        # CHECK EXCEPTION: RUST STREAK (Red/Brown)
-        # Corrosion needs Red Dominance
-        # BUT: If it is very SHARP, it is a Rusty Crack, not a diffuse stain.
-        if (r > g + 10 and r > b + 10) or (r > 100 and g < 80):
-             if avg_gradient < 15: # Stricter: Only soft streaks are Corrosion
-                 return "CORROSION"
-             # If Sharp (>15), treat as Rusty Crack
-             return "CRACK"
-             
-        # CHECK EXCEPTION: DAMP STREAK (Not strictly deep dark)
-        # We handle "Light Crack" vs "Dark Crack"
-        # True cracks are usually very dark (< 50)
-        avg_brightness = (r + g + b) / 3
-        if avg_brightness > 55:
-             # Too light to be a deep crack, unless super sharp
-             if avg_gradient < 30:
-                 return "DAMP"
-                 
-        return "CRACK"
-        
+    # 1. LINEARITY
+    # Standard: High Aspect Ratio (> 3.5)
+    # Diagonal: Low Rectangularity/Solidity (< 0.22) because a diagonal line fills little of its square bbox.
+    is_linear = (aspect_ratio > 3.5) or (rectangularity < 0.22)
+    
+    # 2. SHARPNESS
+    # Cracks have sharp edges (High Gradient).
+    # Damp streaks have soft edges (Low Gradient).
+    # Corrosion is rough (High Texture) but often irregular.
+    # Raised to 25 to reject soft damp/dust streaks.
+    is_sharp = avg_gradient > 25
+    
     # ============================
-    # 2. BLOB ANALYSIS (CORROSION vs DAMP)
+    # 3. CLASSIFICATION LOGIC
     # ============================
     
-    # CORROSION needs High Saturation or Strong Red
+    # CRACK: Linear AND Sharp.
+    # We prioritize this over Color because a "Rusty Crack" is still a Crack.
+    if is_linear and is_sharp:
+         return "CRACK"
+         
+    # CORROSION: Red/Saturated AND Not Linear
+    r, g, b = avg_color
     is_red_dominant = (r > g + 15) and (r > b + 15)
     
-    # Calculate Saturation
     c_max = max(r, g, b)
     c_min = min(r, g, b)
     s = (c_max - c_min) / c_max if c_max != 0 else 0
+    avg_brightness = (r + g + b) / 3
 
-    if area > 20:
-        # Check for Corrosion (Rust)
-        # Stricter: Brightness > 60 (Rust is bright oxide) AND (High Sat OR Red Dom)
-        avg_brightness = (r + g + b) / 3
-        
-        if avg_brightness > 60:
-            if is_red_dominant or (s > 0.4 and r > 100):
-                return "CORROSION"
+    if area > 20 and avg_brightness > 50:
+        # Strict Color Check for Rust
+        if is_red_dominant:
+            return "CORROSION"
+        if s > 0.4 and r > 100: # High Saturation Orange/Yellow
+            return "CORROSION"
             
-        # DAMP needs Low Saturation (relative to Rust) + Darker/Brownish
-        # Or just default to Damp if not Corrosion
-        return "DAMP"
+    # DAMP: Default
+    # Dark blobs, soft streaks, or low saturation.
+    return "DAMP"
             
     return "NORMAL"

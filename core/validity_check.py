@@ -1,6 +1,6 @@
 import numpy as np
 
-def is_valid_pipe(pixels, width, height, binary_map):
+def is_valid_pipe(pixels, width, height, binary_map, trust_roi=False):
     """
     Determines if the image is likely a pipe based on structural continuity and noise distribution.
     Returns: (is_valid: bool, reason: str)
@@ -63,36 +63,8 @@ def is_valid_pipe(pixels, width, height, binary_map):
 
     if check_cylindrical_gradient(pixels):
          return True, "Valid Pipe Structure (Cylindrical Gradient Detected)"
-         
-    # RULE 1: NOISE / TEXTURE REJECTION
-
-    # RULE 1: NOISE / TEXTURE REJECTION
-    # If using purely coverage, we might reject heavy corrosion.
-    # If is_rusty is True, we SKIP the coverage check and rely on Structural Direction (Rule 2)
-    # because a rusty pipe is basically "100% defect" by color, but should have structure.
     
-    if not is_rusty:
-        if defect_pixels > total_pixels * 0.8:
-            return False, "INVALID: Too much noise/texture (>80% coverage). Likely not a pipe."
-    
-    # Check Horizontal Runs (sampled)
-    for r in range(0, height, 5): # skip every 5 lines for speed
-        current_run = 0
-        for c in range(width):
-            # We look for continuity in the PIXELS, not just binary map.
-            # But let's use binary map "edges" or just simple brightness continuity?
-            # Requirement: "Spatial continuity... Directional consistency"
-            # Let's check for long continuous standard-deviation-low regions?
-            # Simpler: Valid pipes often have long edges (shadow/highlight).
-            # Let's check the binary map for large connected components (we effectively do this in region analysis).
-            # But here we need a quick check.
-            pass
-
-    # Better approach for "Pipe Validity":
-    # A pipe image usually has dominant gradient direction (the curve of the pipe).
-    # Walls have isotropic gradients.
-    
-    # Let's count "Edge" pixels using a valid manual gradient check.
+    # CALCULATE EDGE DENSITY (Manual Loop)
     edge_pixels = 0
     vertical_edges = 0
     horizontal_edges = 0
@@ -111,24 +83,77 @@ def is_valid_pipe(pixels, width, height, binary_map):
              if dx > 40: horizontal_edges += 1
              if dy > 40: vertical_edges += 1
              
-    # If edges are totally random (ratio close to 1:1) and high count -> texture.
-    # If dominant direction -> Pipe/Cylinder.
-    
     total_edges = horizontal_edges + vertical_edges
-    # Sampled area approx (width/4 * height/4).
     sampled_pixels = (width // 4) * (height // 4)
     edge_density = total_edges / (2 * sampled_pixels) if sampled_pixels > 0 else 0
     ratio = 0.0
     
-    if total_edges > 50: # If significant structure exists
+    if total_edges > 50: 
         ratio = (horizontal_edges + 1) / (vertical_edges + 1)
-        
-        # Color Check moved to top
+
+    # TRUST ROI CHECK
+    # If a Pipe ROI was found (via DFS), we trust it and skip strict texture checks.
+    # BUT: We still reject Excessive Structure (Text/Code ~ 0.5)
+    if trust_roi:
+         if edge_density < 0.45:
+             return True, f"Valid Pipe Structure (ROI Confirmed, Density {edge_density:.2f})"
+         # Else fall through to specific rejection logic
+         
+    # RULE 1: NOISE / TEXTURE REJECTION
+    
+    # ----------------------------------------------------
+    # NEW: DIGITAL ARTIFACT CHECK (Screenshots/Dashboards)
+    # ----------------------------------------------------
+    # Digital images have "Flat" colors (exact duplicates).
+    # Natural photos have noise (Gaussian distribution).
+    # Check Histogram: If > 15% of pixels are EXACTLY one value (e.g. White).
+    
+    gray_int = (np.mean(pixels, axis=2)).astype(np.uint8)
+    hist, _ = np.histogram(gray_int, bins=256, range=(0,256))
+    max_freq = np.max(hist)
+    
+    if max_freq > total_pixels * 0.15:
+         # Found a massive spike (flat background)
+         return False, f"INVALID: Digital Artifact Detected (Flat Color Spike coverage {max_freq/total_pixels:.2f}). Likely screenshot/dashboard."
+
+    # ----------------------------------------------------
+    # NEW: LOW INFORMATION CHECK (For Flat/Black/White Images)
+    # ----------------------------------------------------
+    # Compute edge density on the whole image (simplified)
+    # If the image is extremely flat (no edges), it's invalid.
+    
+    gray_full = np.mean(pixels, axis=2)
+    gy, gx = np.gradient(gray_full)
+    grad_mag_full = np.sqrt(gx**2 + gy**2)
+    # Threshold for "Edge"
+    edge_mask = grad_mag_full > 10
+    global_edge_density = np.sum(edge_mask) / total_pixels
+    
+    if global_edge_density < 0.01:
+        return False, f"INVALID: Low Information (Edge Density {global_edge_density:.4f}). Image is too flat/empty."
+
+    # RULE 1: NOISE / TEXTURE REJECTION
+    # If using purely coverage, we might reject heavy corrosion.
+    # If is_rusty is True, we SKIP the coverage check and rely on Structural Direction (Rule 2)
+    # because a rusty pipe is basically "100% defect" by color, but should have structure.
+    
+    if not is_rusty:
+        if defect_pixels > total_pixels * 0.8:
+            return False, "INVALID: Too much noise/texture (>80% coverage). Likely not a pipe."
+    
+    # Check Horizontal Runs (sampled)
+    for r in range(0, height, 5): # skip every 5 lines for speed
+        current_run = 0
+        for c in range(width):
+            pass
+            
+    # MOVED UP: Manual Gradient Check was here.
 
 
         # Stricter Noise Check ONLY if NOT rusty
-        # If High Edge Density (e.g. > 50% of pixels) AND No dominant direction
-        threshold = 0.65 if is_rusty else 0.35
+        # If High Edge Density AND No dominant direction
+        # Lowered threshold to 0.10 for non-rusty (smooth pipes should be < 0.05)
+        threshold = 0.65 if is_rusty else 0.10
         
         # Isotropic Noise has ratio ~ 1.0. 
         # Narrowed range to allow weak directionality (e.g. 0.7 or 1.3) to pass.
@@ -140,6 +165,22 @@ def is_valid_pipe(pixels, width, height, binary_map):
         ratio_min = 0.9 if is_rusty else 0.6
         ratio_max = 1.1 if is_rusty else 1.7
         
+        # New: If we have moderate texture but purely isotropic, reject it unless it has strong gradient
+        if not is_rusty and 0.2 < edge_density <= threshold and 0.9 < ratio < 1.1:
+             # Check if we failed cylindrical gradient already
+             return False, f"INVALID: Isotropic Texture (Density {edge_density:.2f}), no dominant direction."
+
+        # ----------------------------------------------------
+        # NEW: MAN-MADE STRUCTURE CHECK (High Frequency)
+        # ----------------------------------------------------
+        # Screenshots of text/code have extremely high edge density (> 0.8) in both directions.
+        # Pipe surfaces are rarely that busy.
+        # Adjusted to 0.4 based on simulation (Text=0.5)
+        if edge_density > 0.4:
+             # Even if it has direction, it's too noisy to be a clean pipe.
+             # Unless it's EXTREMELY rusty? But heavy rust is usually blobbier, not sharp edges everywhere.
+             return False, f"INVALID: Excessive Structure (Density {edge_density:.2f}). Likely text, mesh, or non-pipe object."
+
         if ratio_min < ratio < ratio_max and defect_pixels > total_pixels * 0.55:
              return False, f"INVALID: High entropy (Defects {defect_pixels/total_pixels:.2f}), no dominant direction."
 
