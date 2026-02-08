@@ -58,6 +58,9 @@ Instead of training a Neural Network, we use **Geometric Feature Extraction** to
 - **Aspect Ratio:** `Width / Height`.
     - **Logic:** Cracks are naturally long and thin.
     - **Threshold:** If Aspect Ratio > 3.0, it is classified as a **Crack**.
+    - **Exception:** **Internal Corrosion** (Yellow/Orange streaks) or **Green Algae** (Green streaks). We check Color Dominance (RGB logic) first.
+    - **Green Algae Logic:** If `Green > Red + 10` and `Green > Blue + 10`, it is biological growth -> **Damp/Algae**.
+    - **Internal Corrosion Logic:** If `Red > 100` and `Green > 80` (Yellow/Orange) but `Blue` is low, it represents chemical corrosion -> **Corrosion**.
 - **Rectangularity (Solidity):** `Area / (Bounding Box Width * Height)`.
     - **Logic:** How "solid" or "rectangular" is the shape?
     - **Application:** Corrosion spots are irregular blobs with high solidity vs. bounding box.
@@ -87,3 +90,22 @@ We use array profiling to determine 3D structure from a 2D image.
 **Why Use This?**
 - Replaces "Object Detection" AI with basic Array Algebra.
 - Robust and extremely fast.
+
+---
+
+## 5. Frequency Analysis (Histogram Check)
+**Where:** `core/validity_check.py`
+
+**Concept:**
+We use **Global Histogram Analysis** to detect non-natural images (Digital Wallpaper, Screenshots).
+
+**Code Logic:**
+- **Flat Color Spike:** If > 15% of pixels are exactly the same color (e.g., pure white background), it's likely a screenshot.
+- **Global Saturation Check:**
+    - We compute the Saturation `S = (Max - Min) / Max` for every pixel.
+    - If > 40% of pixels have `S > 0.85`, the image is classified as **"Neon Art / Digital Wallpaper"** and rejected.
+    - Natural pipe corrosion is dull/earthy, not neon pink/green.
+
+**Why Use This?**
+- Prevents the algorithm from processing invalid inputs at the source.
+- Uses basic **O(N)** statistical analysis.

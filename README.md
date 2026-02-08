@@ -22,11 +22,21 @@ No Machine Learning is used.
 
 ## How to Run the Project
 
+### Local Development
 1. Install Python 3
-2. Install required library:
-   pip install pillow
-3. Run the system:
-   python main.py
+2. Install dependencies:
+   ```bash
+   pip install -r requirements.txt
+   ```
+3. Run the application:
+   ```bash
+   streamlit run ui/app.py
+   ```
+
+### 🚀 Live Deployment
+For instructions on how to deploy this app to **Streamlit Community Cloud** (Free), please read [DEPLOYMENT.md](DEPLOYMENT.md).
+
+> **Note**: This app uses Python logic and cannot be hosted on static services like GitHub Pages. You must use a Python-compatible host.
 
 ---
 

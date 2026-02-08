@@ -117,6 +117,27 @@ def is_valid_pipe(pixels, width, height, binary_map, trust_roi=False):
          return False, f"INVALID: Digital Artifact Detected (Flat Color Spike coverage {max_freq/total_pixels:.2f}). Likely screenshot/dashboard."
 
     # ----------------------------------------------------
+    # NEW: DIGITAL WALLPAPER CHECK (High Saturation)
+    # ----------------------------------------------------
+    # Check for Neon colors (High Saturation > 0.9)
+    # Vectorized Saturation Calculation
+    px_float = pixels.astype(np.float32)
+    c_max = np.max(px_float, axis=2)
+    c_min = np.min(px_float, axis=2)
+    
+    # Avoid divide by zero
+    with np.errstate(divide='ignore', invalid='ignore'):
+        s_map = (c_max - c_min) / c_max
+        s_map[c_max == 0] = 0
+        
+    s_map = np.nan_to_num(s_map)
+    
+    # Count high saturation pixels
+    high_sat_pixels = np.sum(s_map > 0.85)
+    if high_sat_pixels > total_pixels * 0.40: # 40% neon/vibrant
+         return False, f"INVALID: Digital Wallpaper/Neon Art (High Saturation Coverage {high_sat_pixels/total_pixels:.2f})."
+
+    # ----------------------------------------------------
     # NEW: LOW INFORMATION CHECK (For Flat/Black/White Images)
     # ----------------------------------------------------
     # Compute edge density on the whole image (simplified)

@@ -181,18 +181,19 @@ def process_image_logic(pixels, width, height, pipe_id):
     total_pixels = width * height
     affected_percentage = round((suspicious_pixels / total_pixels) * 100, 2)
 
-    # Add to Priority Queue
+    # Priority Logic (Only if passed Normal Filter)
     # Severity Score: Crack=3, Corrosion=2, Damp=1. 
-    # Use negative for Min-Heap simulation if needed, or structured object.
     severity_score = 0
     if final_defect == "CRACK": severity_score = 3
     elif final_defect == "CORROSION": severity_score = 2
     elif final_defect == "DAMP": severity_score = 1
     
     # We augment score with affected % for tie-breaking
-    full_priority_score = severity_score * 100 + int(affected_percentage)
+    # Format: 300XX (Score 3, XX%)
+    full_priority_score = (severity_score * 1000) + int(affected_percentage * 10)
     
-    add_to_priority(pipe_id, final_defect, full_priority_score)
+    # Return directly, no external side effect
+    pass
 
     # ======================================================
     # 3️⃣ DYNAMIC BINARY SAMPLE (Focus on Defect)
@@ -293,5 +294,6 @@ def process_image_logic(pixels, width, height, pipe_id):
         "binary_sample": binary_sample,
         "total_pixels": total_pixels,
         "suspicious_pixels": suspicious_pixels,
-        "affected_percentage": affected_percentage
+        "affected_percentage": affected_percentage,
+        "priority_score": full_priority_score
     }

@@ -7,6 +7,14 @@ def classify_region(area, bbox_width, bbox_height, avg_color, rectangularity, av
     aspect_ratio = max(bbox_width, bbox_height) / max(1, min(bbox_width, bbox_height))
 
     # ============================
+    # 0. BIO/ALGAE CHECK (Green Dominance)
+    # ============================
+    # Green is dominant and significantly brighter than Red/Blue
+    # This overrides everything as Algae = DAMP/BIO
+    if g > r + 15 and g > b + 15 and g > 60:
+         return "DAMP" 
+
+    # ============================
     # 1. GLOBAL SOFTNESS CHECK (Priority)
     # ============================
     # Soft edges (Low Gradient) indicate Shadows, Dampness, or Out-of-focus background.
@@ -14,12 +22,17 @@ def classify_region(area, bbox_width, bbox_height, avg_color, rectangularity, av
     is_soft = avg_gradient < 15
     
     if is_soft:
-        # EXCEPTION 1: If it is RED/RUSTY
-        if (r > g + 10 and r > b + 10) or (r > 100 and g < 80):
+        # EXCEPTION 1: If it is RED/RUSTY/ORANGE
+        # Relaxed for Internal Corrosion (Orange/Yellow)
+        # Old: (r > g + 10 and r > b + 10)
+        # New: Warm colors (R likely max, or R~G for yellow)
+        is_warm = (r > b + 20) and (r > 50)
+        
+        if is_warm:
              # If it is LINEAR (Aspect Ratio > 3.0), it's likely a Rusty Crack even if softish.
              # Only call it "Corrosion Stain" if it is VERY soft (< 10) OR Not Linear.
              if aspect_ratio > 3.0:
-                 if avg_gradient < 10: return "CORROSION"
+                 if avg_gradient < 8: return "CORROSION" # Very soft streak
                  return "CRACK" # Rusty Linear Crack (Soft but not too soft)
              else:
                  return "CORROSION" # Blobby soft stain
@@ -55,20 +68,24 @@ def classify_region(area, bbox_width, bbox_height, avg_color, rectangularity, av
     if is_linear and is_sharp:
          return "CRACK"
          
-    # CORROSION: Red/Saturated AND Not Linear
+    # CORROSION check
     r, g, b = avg_color
     is_red_dominant = (r > g + 15) and (r > b + 15)
+    
+    # Internal Corrosion: Bright Orange/Yellow (R~G > B)
+    # e.g. R=200, G=180, B=50
+    is_yellow_corrosion = (r > 100) and (g > 80) and (b < 100) and (abs(int(r)-int(g)) < 40)
     
     c_max = max(r, g, b)
     c_min = min(r, g, b)
     s = (c_max - c_min) / c_max if c_max != 0 else 0
     avg_brightness = (r + g + b) / 3
 
-    if area > 20 and avg_brightness > 50:
+    if area > 20 and avg_brightness > 40:
         # Strict Color Check for Rust
-        if is_red_dominant:
+        if is_red_dominant or is_yellow_corrosion:
             return "CORROSION"
-        if s > 0.4 and r > 100: # High Saturation Orange/Yellow
+        if s > 0.35 and r > 90: # High Saturation Orange/Yellow/Red
             return "CORROSION"
             
     # DAMP: Default
